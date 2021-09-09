@@ -337,6 +337,9 @@ def plot_conte69(data, lhlabel, rhlabel, surf='midthickness',
     """
     Plots surface `data` on Conte69 Atlas
 
+    (This is a modified version of plotting.plot_conte69 from netneurotools.
+     This version will be merged with the one on netneurotools in future.)
+
     Parameters
     ----------
     data : (N,) array_like
