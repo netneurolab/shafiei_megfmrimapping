@@ -1,3 +1,4 @@
+import copy
 import scipy
 import sklearn
 import numpy as np
@@ -10,6 +11,7 @@ from scipy.optimize import curve_fit
 from scipy.spatial.distance import cdist
 from mapalign.embed import compute_diffusion_map
 from netneurotools import stats as netneurostats
+from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression
 from matplotlib.colors import ListedColormap
 from matplotlib.colors import LinearSegmentedColormap
@@ -144,8 +146,7 @@ def global_lreg(megdata, fmridata, distance, correct_dist=True,
 
     corrVal = stats.pearsonr(Y.flatten(), pred_Y.flatten())[0]
 
-    temp = np.empty((nnode, nnode))
-    temp[:] = np.nan
+    temp = np.zeros((nnode, nnode))
     temp[mask] = pred_Y
     full_pred_fc = temp + temp.T
     np.fill_diagonal(full_pred_fc, 1)
@@ -158,7 +159,7 @@ def global_lreg(megdata, fmridata, distance, correct_dist=True,
 
 def get_percent_dominance(megdata, fmridata, distance, correct_dist=True,
                           adjusted_rsq=True):
-    percentDominance_adj = []
+    percentDominance = []
     nnode = np.shape(distance)[0]
 
     if correct_dist:
@@ -194,9 +195,9 @@ def get_percent_dominance(megdata, fmridata, distance, correct_dist=True,
             model_metrics, model_rsq = netneurostats.get_dominance_stats(X, Y,
                                         use_adjusted_r_sq=False)
         dom_ratio = model_metrics['total_dominance']/model_metrics['full_r_sq']
-        percentDominance_adj.append(dom_ratio*100)
+        percentDominance.append(dom_ratio*100)
 
-    return np.array(percentDominance_adj)
+    return np.array(percentDominance)
 
 
 def get_gradients(connectmat, ncomp):
@@ -311,6 +312,207 @@ def train_test_split_distance(X, Y, coords, train_pct=.75, sourceNode='random'):
     Y_test = Y[test_idx]
 
     return X_train, X_test, Y_train, Y_test
+
+
+def regional_lreg_cv(megdata, fmridata, distance, coor, correct_dist=True,
+                     train_pct=0.75, verbose=False):
+
+    nnode = distance.shape[0]
+    nsplit = nnode-1
+
+    corr_train_avg = []
+    corr_test_avg = []
+
+    if correct_dist:
+        mri_distcorrect = remove_distance(fmridata, distance)[0]
+        meg_distcorrect = [remove_distance(megdata[band], distance)[0]
+                           for band in range(len(megdata))]
+
+    for node in range(nnode):
+        if correct_dist:
+            avgFCmeg_node = [meg_distcorrect[n][:, node]
+                             for n in range(len(megdata))]
+            avgFCmeg_node = np.array(avgFCmeg_node).T
+
+            X = np.delete(avgFCmeg_node, node, axis=0)
+
+            Y = mri_distcorrect[:, node]
+            Y = np.delete(Y, node)
+        else:
+            avgFCmeg_node = [megdata[band][:, node]
+                             for band in range(len(megdata))]
+            avgFCmeg_node = np.array(avgFCmeg_node).T
+
+            X = np.delete(avgFCmeg_node, node, axis=0)
+
+            Y = fmridata[:, node]
+            Y = np.delete(Y, node)
+
+        # cross-validation
+        corr_train = []
+        corr_test = []
+
+        mod_coor = coor.copy()
+        mod_coor = np.delete(mod_coor, node, axis=0)
+
+        for split in range(nsplit):
+            X_train, X_test, Y_train, Y_test = train_test_split_distance(
+                X, Y, mod_coor, train_pct=train_pct, sourceNode='random')
+
+            sc_x = StandardScaler()
+            sc_x.fit(X_train)
+            X_train = sc_x.transform(X_train)
+            X_test = sc_x.transform(X_test)
+            sc_y = StandardScaler()
+            sc_y.fit(Y_train.reshape(-1, 1))
+            Y_train = sc_y.transform(Y_train.reshape(-1, 1))
+            Y_test = sc_y.transform(Y_test.reshape(-1, 1))
+
+            model = LinearRegression(fit_intercept=True, normalize=False).fit(
+                X_train, Y_train)
+
+            pred_Y_train = model.predict(X_train)
+            pred_Y_test = model.predict(X_test)
+            corr_train.append(stats.pearsonr(Y_train.flatten(),
+                                            pred_Y_train.flatten())[0])
+            corr_test.append(stats.pearsonr(Y_test.flatten(),
+                                            pred_Y_test.flatten())[0])
+
+        corr_train_avg.append(np.mean(corr_train))
+        corr_test_avg.append(np.mean(corr_test))
+
+        if verbose:
+            print('\nCV node %s of %s nodes done!' % (node+1, nnode))
+
+    return np.array(corr_train_avg), np.array(corr_test_avg)
+
+
+def regional_lreg_subj(subjmegdata, subjfmridata, distance, correct_dist=True,
+                       verbose=False):
+    # iterate over subjects and predict R2 for each
+    nnode = distance.shape[0]
+    nsubj = subjfmridata.shape[2]
+    nband = len(subjmegdata)
+
+    subjCorrVal = []
+    groupCorrVal = []
+
+    for subj in range(nsubj):
+        leaveoutsubjFCmri = subjfmridata[:, :, subj]
+        leaveoutsubjFCmeg = []
+        for band in range(nband):
+            leaveoutsubjFCmeg.append(subjmegdata[band][:, :, subj])
+
+        tempFCmri = subjfmridata.copy()
+        tempFCmri[:, :, subj] = np.nan
+        avgFCmriSubjects = np.nanmean(tempFCmri, 2)
+
+        tempFCmeg = copy.deepcopy(subjmegdata)
+        for band in range(nband):
+            tempFCmeg[band][:, :, subj] = np.nan
+        avgFCmegSubjects = [np.nanmean(tempFCmeg[band], axis=2)
+                            for band in range(nband)]
+
+        if correct_dist:
+            mask = np.mask_indices(nnode, np.triu, 1)
+
+            maskedFCmeg = [avgFCmegSubjects[band][mask]
+                           for band in range(nband)]
+            allconnectivityGroup = maskedFCmeg.copy()
+            allconnectivityGroup.append(avgFCmriSubjects[mask])
+
+            maskedFCmegSubj = [leaveoutsubjFCmeg[band][mask]
+                               for band in range(nband)]
+            allconnectivitySubj = maskedFCmegSubj.copy()
+            allconnectivitySubj.append(leaveoutsubjFCmri[mask])
+
+            residConnectivityGroup = []
+            residConnectivitySubj = []
+            for n in range(len(allconnectivityGroup)):
+                x = distance[mask]
+                y = allconnectivityGroup[n]
+
+                # fit the exponential model on group data (train data) and use
+                # the same fit to correct subj data (test data) for distance
+                popt, pcov = curve_fit(fit_exponential, x, y, bounds=(-1, 2))
+                modeled_y = fit_exponential(x, *popt)
+
+                temp = y - modeled_y
+                tempConn = np.zeros((nnode, nnode))
+                tempConn[mask] = temp
+                tempConn = tempConn + tempConn.T
+                np.fill_diagonal(tempConn, 1)
+                residConnectivityGroup.append(tempConn)
+
+                y_subj = allconnectivitySubj[n]
+                temp = y_subj - modeled_y
+                tempConn = np.zeros((nnode, nnode))
+                tempConn[mask] = temp
+                tempConn = tempConn + tempConn.T
+                np.fill_diagonal(tempConn, 1)
+                residConnectivitySubj.append(tempConn)
+
+            subjmri = residConnectivitySubj[-1]
+            groupmri = residConnectivityGroup[-1]
+
+            subjmeg = residConnectivitySubj[:nband]
+            groupmeg = residConnectivityGroup[:nband]
+        else:
+            subjmri = leaveoutsubjFCmri
+            groupmri = avgFCmriSubjects
+
+            subjmeg = leaveoutsubjFCmeg
+            groupmeg = avgFCmegSubjects
+
+        corrVal_nodes_group = []
+        corrVal_nodes_subj = []
+        for node in range(nnode):
+            avgFreqBandFC = [groupmeg[band][:, node] for band in range(nband)]
+            avgFreqBandFC = np.array(avgFreqBandFC).T
+
+            X = np.delete(avgFreqBandFC, node, axis=0)
+
+            Y = groupmri[:, node]
+            Y = np.delete(Y, node)
+
+            X_subj = [subjmeg[band][:, node] for band in range(nband)]
+            X_subj = np.array(X_subj).T
+            X_subj = np.delete(X_subj, node, axis=0)
+
+            Y_subj = subjmri[:, node]
+            Y_subj = np.delete(Y_subj, node)
+
+            sc_x = StandardScaler()
+            sc_x.fit(X)
+            X = sc_x.transform(X)
+            X_subj = sc_x.transform(X_subj)
+            sc_y = StandardScaler()
+            sc_y.fit(Y.reshape(-1, 1))
+            Y = sc_y.transform(Y.reshape(-1, 1))
+            Y_subj = sc_y.transform(Y_subj.reshape(-1, 1))
+
+            model = LinearRegression(fit_intercept=True,
+                                     normalize=False).fit(X, Y)
+
+            Y_pred_subj = model.predict(X_subj)
+            corrVal = stats.pearsonr(Y_pred_subj.flatten(),
+                                     Y_subj.flatten())[0]
+            corrVal_nodes_subj.append(corrVal)
+
+            Y_pred_group = model.predict(X)
+            corrVal = stats.pearsonr(Y_pred_group.flatten(), Y.flatten())[0]
+            corrVal_nodes_group.append(corrVal)
+
+        subjCorrVal.append(corrVal_nodes_subj)
+        groupCorrVal.append(corrVal_nodes_group)
+
+        if verbose:
+            print('\nSubj %s of %s subjects done!' % (subj+1, nsubj))
+
+    subjCorrVal = np.array(subjCorrVal)
+    groupCorrVal = np.array(groupCorrVal)
+
+    return np.mean(groupCorrVal, axis=0), np.mean(subjCorrVal, axis=0)
 
 
 def scatterregplot(x, y, title, xlab, ylab, pointsize):
@@ -490,4 +692,4 @@ def make_colormaps():
                                            np.ones((42, 3)) * colors[4],
                                            np.ones((42, 3)) * colors[5])))
 
-    return cmap_seq, megcmap, megcmap2, categ_cmap
+    return cmap_seq, cmap_seq_r, megcmap, megcmap2, categ_cmap

@@ -1,4 +1,4 @@
-
+import mayavi
 import fcn_megfmri
 import numpy as np
 import pandas as pd
@@ -34,7 +34,7 @@ coor = coor[:, 1:].astype(float)
 distance = sklearn.metrics.pairwise_distances(coor)
 
 # get custom colormaps
-cmap_seq, megcmap, megcmap2, categ_cmap = fcn_megfmri.make_colormaps()
+cmap_seq, cmap_seq_r, megcmap, megcmap2, categ_cmap = fcn_megfmri.make_colormaps()
 
 ####################################
 # linear regression
@@ -70,11 +70,11 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
 fig, ax = plt.subplots(1, 1)
 plt.hist(rsq, density=False, rwidth=0.9,
          color=[153/255, 153/255, 153/255], label='regional fit')
-plt.vlines([rsq_g], ymin=0, ymax=100, linewidth=3,
+plt.vlines([rsq_g], ymin=0, ymax=115, linewidth=3,
            color=[242/255, 111/255, 136/255], label='global fit')
 plt.xlabel('R-squared')
 plt.ylabel('count')
-plt.title('meg-fmri mapping (distance corrected)')
+plt.title('meg-fmri mapping')
 plt.legend()
 ax.spines['top'].set_visible(False)
 ax.spines['right'].set_visible(False)
@@ -129,7 +129,7 @@ ax = sns.boxplot(x='rsn', y='R-squared',
                  order=plot_order, showfliers=False)
 
 sns.despine(ax=ax, offset=5, trim=True)
-ax.axes.set_title('distance corrected')
+# ax.axes.set_title('distance corrected')
 
 plt.setp(ax.artists, edgecolor = 'k', facecolor='w')
 plt.setp(ax.lines, color='k')
@@ -171,7 +171,7 @@ ax = sns.boxplot(x='band', y='percent', data=bandContrib,
                  order=plot_order, showfliers=False)
 
 sns.despine(ax=ax, offset=5, trim=True)
-ax.axes.set_title('Dominance analysis (distance corrected)')
+ax.axes.set_title('Dominance analysis')
 
 plt.setp(ax.artists, edgecolor = 'k', facecolor='w')
 plt.setp(ax.lines, color='k')
@@ -199,7 +199,8 @@ new_order = ['Default', 'Cont', 'Limbic', 'SalVentAttn', 'DorsAttn',
 new_order_idx = [orig_order.index(rsnname) for rsnname in new_order]
 reordered_bandrsncontrib = bandrsncontrib[:, new_order_idx]
 ax = sns.heatmap(reordered_bandrsncontrib, cmap=cmap_seq, yticklabels=bands,
-                 vmin=5.7, vmax=34.5, linewidth=0.5,
+                 vmin=np.min(reordered_bandrsncontrib),
+                 vmax=np.max(reordered_bandrsncontrib), linewidth=0.5,
                  xticklabels=new_order)
 ax.axes.set_title('percent dominance for intrinsic nerworks')
 ax.figure.set_figwidth(7)
@@ -239,3 +240,76 @@ for n, band in enumerate(bands):
                                       colormap='viridis', customcmap=megcmap2,
                                       colorbartitle=band,
                                       surf='inflated')
+
+####################################
+# linear regression: distance-dependant CV
+####################################
+# regional model with distance dependent cross-validation
+train_corr, test_corr = fcn_megfmri.regional_lreg_cv(megdata=avgFCmeg,
+                                                     fmridata=avgFCmri,
+                                                     distance=distance,
+                                                     coor=coor,
+                                                     correct_dist=True,
+                                                     train_pct=0.75,
+                                                     verbose=True)
+
+# plot on brain surface
+toplot = test_corr
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 2.5),
+                                  vmax=np.percentile(toplot, 97.5),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle='test set - Pearson r',
+                                  surf='inflated')
+
+# correlate and plot
+x = train_corr
+y = test_corr
+
+corr = stats.pearsonr(x, y)
+pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                 corrtype='pearson',
+                                 lhannot=lhlabels, rhannot=rhlabels)
+
+title = 'Pearson r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+xlab = 'Pearson r - training set'
+ylab = 'Pearson r - test set'
+plt.figure()
+fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
+
+####################################
+# linear regression: subj-level (leave-one-subject out)
+####################################
+# subject data are not included
+subjFCmri = np.load('../../data/subjFCmri.npy')
+subjFCmeg = np.load('../../data/subjFCmeg_aec.npy')
+
+train_corr, test_corr = fcn_megfmri.regional_lreg_subj(subjmegdata=subjFCmeg,
+                                                       subjfmridata=subjFCmri,
+                                                       distance=distance,
+                                                       correct_dist=True,
+                                                       verbose=True)
+
+# plot on brain surface
+toplot = test_corr
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 2.5),
+                                  vmax=np.percentile(toplot, 97.5),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle='test set - Pearson r',
+                                  surf='inflated')
+
+# correlate and plot
+x = train_corr
+y = test_corr
+
+corr = stats.pearsonr(x, y)
+pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                 corrtype='pearson',
+                                 lhannot=lhlabels, rhannot=rhlabels)
+
+title = 'Pearson r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+xlab = 'Pearson r - training set'
+ylab = 'Pearson r - test set'
+plt.figure()
+fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
