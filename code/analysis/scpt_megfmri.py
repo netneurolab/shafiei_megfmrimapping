@@ -1,4 +1,5 @@
 import mayavi
+import neuromaps
 import fcn_megfmri
 import numpy as np
 import pandas as pd
@@ -7,6 +8,7 @@ import sklearn.metrics
 import scipy.stats as stats
 import matplotlib.pyplot as plt
 from statsmodels.stats import multitest
+from neuromaps.parcellate import Parcellater
 
 
 # load data
@@ -132,6 +134,7 @@ ax.spines['right'].set_visible(False)
 ####################################
 # functional hierarchy
 ####################################
+# use fmri data from same subjects to get fc gradient
 grads, lambdas = fcn_megfmri.get_gradients(avgFCmri, ncomp=10)
 
 ncomp = 0
@@ -143,6 +146,12 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
                                   colormap='viridis', customcmap=megcmap,
                                   colorbartitle='fc gradient %s' % (ncomp+1),
                                   surf='inflated')
+
+# or use neuromaps to get fc gradient of all HCP subjects
+grad1 = neuromaps.datasets.fetch_annotation(desc='fcgradient01')
+parcellation = [lhlabels, rhlabels]
+parc = Parcellater(parcellation, 'fslr')
+parcellated_grad1 = parc.fit_transform(grad1, 'fslr')
 
 # correlate and plot
 x = fcgrad
