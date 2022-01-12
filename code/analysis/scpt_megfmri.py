@@ -6,14 +6,15 @@ import seaborn as sns
 import sklearn.metrics
 import scipy.stats as stats
 import matplotlib.pyplot as plt
+from statsmodels.stats import multitest
 
 
 # load data
-megdata = np.load('../../data/groupFCmeg_aec.npy.npz')
+megdata = np.load('../../data/groupFCmeg_aec_orth_schaefer400.npy.npz')
 avgFCmeg = megdata['megfc']
 bands = megdata['bands']
 
-avgFCmri = np.load('../../data/groupFCmri.npy')
+avgFCmri = np.load('../../data/groupFCmri_schaefer400.npy')
 
 # load schaefer info
 schaeferpath = '../../data/schaefer/'
@@ -36,6 +37,10 @@ distance = sklearn.metrics.pairwise_distances(coor)
 # get custom colormaps
 cmap_seq, cmap_seq_r, megcmap, megcmap2, categ_cmap = fcn_megfmri.make_colormaps()
 
+plt.rcParams['svg.fonttype'] = 'none'
+plt.rcParams['font.sans-serif'] = ['Myriad Pro']
+plt.rcParams['font.size'] = 18.0
+
 ####################################
 # linear regression
 ####################################
@@ -43,15 +48,60 @@ cmap_seq, cmap_seq_r, megcmap, megcmap2, categ_cmap = fcn_megfmri.make_colormaps
 rsq, full_pred_fc, corrVal = fcn_megfmri.regional_lreg(megdata=avgFCmeg,
                                                        fmridata=avgFCmri,
                                                        distance=distance,
-                                                       correct_dist=True,
+                                                       correct_dist=False,
                                                        adjusted_rsq=True)
 
 # global model
 rsq_g, full_pred_fc_g, corrVal_g = fcn_megfmri.global_lreg(megdata=avgFCmeg,
                                                            fmridata=avgFCmri,
                                                            distance=distance,
-                                                           correct_dist=True,
+                                                           correct_dist=False,
                                                            adjusted_rsq=True)
+
+####################################
+# visualize predicted fc
+####################################
+nnode = len(rsq)
+masku = np.mask_indices(nnode, np.triu, 1)
+
+# regional model
+plt.figure()
+plt.imshow(full_pred_fc, vmin=0, vmax=0.55,
+           cmap=cmap_seq_r)
+plt.title('predicted fmri fc - upper tri (regional)')
+plt.colorbar()
+
+# scatter plot
+xlab = 'empirical fmri fc'
+ylab = 'predicted fmri fc'
+title = 'regional model: pearson r = %1.3f' % (stats.pearsonr(avgFCmri[masku],
+                                               full_pred_fc[masku])[0])
+plt.figure()
+myplot = fcn_megfmri.scatterregplot(avgFCmri[masku],
+                                    full_pred_fc[masku],
+                                    title, xlab, ylab, 50)
+myplot.figure.set_figwidth(7)
+myplot.figure.set_figheight(7)
+
+
+# global model
+plt.figure()
+plt.imshow(full_pred_fc_g, vmin=0, vmax=0.35,
+           cmap=cmap_seq_r)
+plt.title('predicted fmri fc - upper tri (global)')
+plt.colorbar()
+
+# scatter plot
+xlab = 'empirical fmri fc'
+ylab = 'predicted fmri fc'
+title = 'global model: pearson r = %1.3f' % (stats.pearsonr(avgFCmri[masku],
+                                             full_pred_fc_g[masku])[0])
+plt.figure()
+myplot = fcn_megfmri.scatterregplot(avgFCmri[masku],
+                                    full_pred_fc_g[masku],
+                                    title, xlab, ylab, 50)
+myplot.figure.set_figwidth(7)
+myplot.figure.set_figheight(7)
 
 ####################################
 # visualize R2 distribution
@@ -129,7 +179,6 @@ ax = sns.boxplot(x='rsn', y='R-squared',
                  order=plot_order, showfliers=False)
 
 sns.despine(ax=ax, offset=5, trim=True)
-# ax.axes.set_title('distance corrected')
 
 plt.setp(ax.artists, edgecolor = 'k', facecolor='w')
 plt.setp(ax.lines, color='k')
@@ -145,7 +194,7 @@ plt.tight_layout()
 percentDominance_adj = fcn_megfmri.get_percent_dominance(megdata=avgFCmeg,
                                                          fmridata=avgFCmri,
                                                          distance=distance,
-                                                         correct_dist=True,
+                                                         correct_dist=False,
                                                          adjusted_rsq=True)
 
 
@@ -226,7 +275,7 @@ toplot = maxContribidx
 brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
                                   colormap='viridis', customcmap=categ_cmap,
                                   colorbartitle=('max contribution'),
-                                  surf='inflated')
+                                  surf='inflated', vmin=0, vmax=5)
 
 ####################################
 # band-specific contribution
@@ -249,7 +298,7 @@ train_corr, test_corr = fcn_megfmri.regional_lreg_cv(megdata=avgFCmeg,
                                                      fmridata=avgFCmri,
                                                      distance=distance,
                                                      coor=coor,
-                                                     correct_dist=True,
+                                                     correct_dist=False,
                                                      train_pct=0.75,
                                                      verbose=True)
 
@@ -259,19 +308,19 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
                                   vmin=np.percentile(toplot, 2.5),
                                   vmax=np.percentile(toplot, 97.5),
                                   colormap='viridis', customcmap=megcmap,
-                                  colorbartitle='test set - Pearson r',
+                                  colorbartitle='training set - Pearson r',
                                   surf='inflated')
 
 # correlate and plot
 x = train_corr
 y = test_corr
 
-corr = stats.pearsonr(x, y)
+corr = stats.spearmanr(x, y)
 pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
-                                 corrtype='pearson',
+                                 corrtype='spearman',
                                  lhannot=lhlabels, rhannot=rhlabels)
 
-title = 'Pearson r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+title = 'Spearman r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
 xlab = 'Pearson r - training set'
 ylab = 'Pearson r - test set'
 plt.figure()
@@ -281,13 +330,13 @@ fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
 # linear regression: subj-level (leave-one-subject out)
 ####################################
 # subject data are not included
-subjFCmri = np.load('../../data/subjFCmri.npy')
-subjFCmeg = np.load('../../data/subjFCmeg_aec.npy')
+subjFCmri = np.load('../../data/subjFCmri_schaefer400.npy')
+subjFCmeg = np.load('../../data/subjFCmeg_aec_orth_schaefer400.npy')
 
 train_corr, test_corr = fcn_megfmri.regional_lreg_subj(subjmegdata=subjFCmeg,
                                                        subjfmridata=subjFCmri,
                                                        distance=distance,
-                                                       correct_dist=True,
+                                                       correct_dist=False,
                                                        verbose=True)
 
 # plot on brain surface
@@ -296,20 +345,136 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
                                   vmin=np.percentile(toplot, 2.5),
                                   vmax=np.percentile(toplot, 97.5),
                                   colormap='viridis', customcmap=megcmap,
-                                  colorbartitle='test set - Pearson r',
+                                  colorbartitle='training set - Pearson r',
                                   surf='inflated')
 
 # correlate and plot
 x = train_corr
 y = test_corr
 
-corr = stats.pearsonr(x, y)
+corr = stats.spearmanr(x, y)
 pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
-                                 corrtype='pearson',
+                                 corrtype='spearman',
                                  lhannot=lhlabels, rhannot=rhlabels)
 
-title = 'Pearson r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+title = 'Spearman r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
 xlab = 'Pearson r - training set'
 ylab = 'Pearson r - test set'
 plt.figure()
 fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
+
+####################################
+# ctf metric
+####################################
+ctf = np.load('../../data/avg_peak_err_ctf_resolutionMatrix_lcmv_Schaefer400.npy')
+
+# correlate and plot
+x = ctf
+y = rsq
+
+corr = stats.spearmanr(x, y)
+pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                corrtype='spearman',
+                                lhannot=lhlabels, rhannot=rhlabels)
+
+title = 'spearman r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+xlab = 'localization error'
+ylab = 'R-squared'
+plt.figure()
+fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
+
+# plot on brain surface
+toplot = ctf
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 2.5),
+                                  vmax=np.percentile(toplot, 97.5),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle='localization error',
+                                  surf='inflated')
+
+####################################
+# BigBrain profile intensity
+####################################
+profileIntensity = np.load('../../data/profileIntensity_schaefer400.npy')
+
+corr_rsq_intensity = np.zeros((1, 50))
+pvalspin_rsq_intensity = np.zeros((1, 50))
+for surf in range(50):
+    x = stats.zscore(profileIntensity[surf, :])
+    y = rsq
+
+    corr = stats.spearmanr(x, y)
+
+    pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                     corrtype='spearman',
+                                     lhannot=lhlabels, rhannot=rhlabels)
+
+    corr_rsq_intensity[0, surf] = corr[0]
+    pvalspin_rsq_intensity[0, surf] = pvalspin
+
+multicomp = multitest.multipletests(pvalspin_rsq_intensity.squeeze(),
+                                    alpha=0.05, method='fdr_bh')
+
+pointsize = np.zeros((50, 1))
+pointsize = np.squeeze(pointsize)
+pointsize[multicomp[1] > 0.05] = 1
+
+fig, ax = plt.subplots(1, 1)
+ax = sns.scatterplot(np.arange(50), corr_rsq_intensity.flatten(),
+                     hue=corr_rsq_intensity.flatten(),
+                     palette=cmap_seq_r, size=pointsize)
+
+plt.xlabel('cortical depth')
+plt.ylabel('Spearman rho - rsq vs profile intensity')
+ax.spines['top'].set_visible(False)
+ax.spines['right'].set_visible(False)
+
+ax.figure.set_figwidth(8)
+ax.figure.set_figheight(4)
+plt.tight_layout()
+
+# brain plots
+layer = 0
+toplot = profileIntensity[layer, :]
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 2.5),
+                                  vmax=np.percentile(toplot, 97.5),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle=('Profile Intensity, layer %s'
+                                                  % (layer)),
+                                  surf='inflated')
+
+####################################
+# linear regression: band specific
+####################################
+# regional model
+rsq, full_pred_fc, corrVal = fcn_megfmri.regional_lreg(megdata=avgFCmeg,
+                                                        fmridata=avgFCmri,
+                                                        distance=distance,
+                                                        correct_dist=False,
+                                                        adjusted_rsq=True)
+rsq_band = pd.DataFrame(rsq, columns=['multiband'])
+for n, band in enumerate(bands):
+    rsq, _, _ = fcn_megfmri.regional_lreg(megdata=avgFCmeg[n,:,:][np.newaxis, :, :],
+                                          fmridata=avgFCmri,
+                                          distance=distance,
+                                          correct_dist=False,
+                                          adjusted_rsq=True)
+    rsq_band[band] = rsq
+
+# plot R-squared distribution
+colors = sns.color_palette('hls', 7)
+sns.displot(rsq_band, kind='kde', fill=True, height=8, aspect=0.7,
+            palette=colors)
+sns.despine(offset=5, trim=True)
+plt.tight_layout()
+
+# plot R-squared on brain surface
+band = bands[n]
+toplot = rsq_band[band]
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 2.5),
+                                  vmax=np.percentile(toplot, 97.5),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle=band,
+                                  surf='inflated')
