@@ -1,4 +1,4 @@
-# Mapping electromagnetic networks to haemodynamic networks in the human brain
+# Hierarchical decoupling of electromagnetic and haemodynamic cortical networks
 This repository contains processing scripts and data in support of the preprint:
 
 Shafiei, G., Baillet, S., & Misic, B. (2021). Hierarchical decoupling of electromagnetic and haemodynamic cortical networks. bioRxiv.
