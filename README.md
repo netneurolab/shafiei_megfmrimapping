@@ -1,7 +1,7 @@
 # Mapping electromagnetic networks to haemodynamic networks in the human brain
 This repository contains processing scripts and data in support of the preprint:
 
-Shafiei, G., Baillet, S., & Misic, B. (2021). Mapping electromagnetic networks to haemodynamic networks in the human brain. bioRxiv.
+Shafiei, G., Baillet, S., & Misic, B. (2021). Hierarchical decoupling of electromagnetic and haemodynamic cortical networks. bioRxiv.
 [https://www.biorxiv.org/content/10.1101/2021.09.07.458941v1.abstract](https://www.biorxiv.org/content/10.1101/2021.09.07.458941v1.abstract)
 
 ## `code`
