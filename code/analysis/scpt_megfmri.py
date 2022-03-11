@@ -9,6 +9,7 @@ import scipy.stats as stats
 import matplotlib.pyplot as plt
 from statsmodels.stats import multitest
 from neuromaps.parcellate import Parcellater
+from sklearn.preprocessing import MinMaxScaler
 
 
 # load data
@@ -405,11 +406,13 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
 # BigBrain profile intensity
 ####################################
 profileIntensity = np.load('../../data/profileIntensity_schaefer400.npy')
+scaler = MinMaxScaler()
+profileIntensity_norm = 1-scaler.fit_transform(profileIntensity.T)
 
 corr_rsq_intensity = np.zeros((1, 50))
 pvalspin_rsq_intensity = np.zeros((1, 50))
 for surf in range(50):
-    x = stats.zscore(profileIntensity[surf, :])
+    x = stats.zscore(profileIntensity_norm[:, surf])
     y = rsq
 
     corr = stats.spearmanr(x, y)
@@ -431,7 +434,7 @@ pointsize[multicomp[1] > 0.05] = 1
 fig, ax = plt.subplots(1, 1)
 ax = sns.scatterplot(np.arange(50), corr_rsq_intensity.flatten(),
                      hue=corr_rsq_intensity.flatten(),
-                     palette=cmap_seq_r, size=pointsize)
+                     palette=cmap_seq, size=pointsize)
 
 plt.xlabel('cortical depth')
 plt.ylabel('Spearman rho - rsq vs profile intensity')
@@ -444,7 +447,7 @@ plt.tight_layout()
 
 # brain plots
 layer = 0
-toplot = profileIntensity[layer, :]
+toplot = profileIntensity_norm[:, layer]
 brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
                                   vmin=np.percentile(toplot, 2.5),
                                   vmax=np.percentile(toplot, 97.5),
