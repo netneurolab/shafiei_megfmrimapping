@@ -1,4 +1,5 @@
 import mayavi
+import abagen
 import neuromaps
 import fcn_megfmri
 import numpy as np
@@ -294,8 +295,8 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
 for n, band in enumerate(bands):
     toplot = percentDominance_adj[:, n]
     brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
-                                      vmin=np.percentile(toplot, 2.5),
-                                      vmax=np.percentile(toplot, 97.5),
+                                      vmin=np.ceil(np.percentile(toplot, 2.5)),
+                                      vmax=np.ceil(np.percentile(toplot, 97.5)),
                                       colormap='viridis', customcmap=megcmap2,
                                       colorbartitle=band,
                                       surf='inflated')
@@ -490,3 +491,111 @@ brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
                                   colormap='viridis', customcmap=megcmap,
                                   colorbartitle=band,
                                   surf='inflated')
+
+####################################
+# structure-function coupling
+####################################
+sc_consensus = np.load('../../data/consensusSC_wei_Schaefer400.npy')
+
+scfc = []
+for node in range(avgFCmri.shape[0]):
+    X = avgFCmri[:, node]
+    X = np.delete(X, node)
+
+    Y = sc_consensus[:, node]
+    Y = np.delete(Y, node)
+
+    nnzidx = np.where(Y != 0)
+
+    scfc.append(stats.spearmanr(X[nnzidx], Y[nnzidx])[0])
+
+# correlate and plot
+x = np.array(scfc)
+y = rsq
+
+corr = stats.spearmanr(x, y)
+pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                 corrtype='spearman',
+                                 lhannot=lhlabels, rhannot=rhlabels)
+
+title = 'spearman r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+xlab = 'sc-fc coupling (spearmanr)'
+ylab = 'R-squared'
+plt.figure()
+fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
+
+# brain plot
+toplot = np.array(scfc)
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 0),
+                                  vmax=np.percentile(toplot, 100),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle='scfccoupling',
+                                  surf='inflated')
+
+####################################
+# SNR
+####################################
+avg_snr = np.load('../../data/avgsnr_schaefer400.npy')
+
+# correlate and plot
+x = avg_snr
+y = rsq
+
+corr = stats.spearmanr(x, y)
+pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                 corrtype='spearman',
+                                 lhannot=lhlabels, rhannot=rhlabels)
+
+title = 'spearman r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+xlab = 'SNR (dB)'
+ylab = 'R-squared'
+plt.figure()
+fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
+
+# brain plot
+toplot = avg_snr
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 0),
+                                  vmax=np.percentile(toplot, 100),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle='SNR (dB)',
+                                  surf='inflated')
+
+####################################
+# NPY1R gene
+####################################
+ahba_data = '/path/to/abagen'
+schaefer_mni = (schaeferpath + 'MNI/Schaefer2018_400Parcels' +
+                '_7Networks_order_FSLMNI152_1mm.nii.gz')
+expression = abagen.get_expression_data(schaefer_mni, missing='interpolate',
+                                        data_dir=ahba_data,
+                                        lr_mirror='bidirectional')
+npy1r_exp = expression['NPY1R']
+
+# to load the data without running abagen
+# npy1r_exp = np.load('../../data/npy1r_exp.npy')
+
+# brain plot
+toplot = np.array(npy1r_exp)
+brains = fcn_megfmri.plot_conte69(toplot, lhlabels, rhlabels,
+                                  vmin=np.percentile(toplot, 0),
+                                  vmax=np.percentile(toplot, 100),
+                                  colormap='viridis', customcmap=megcmap,
+                                  colorbartitle='NPY1R expression',
+                                  surf='inflated')
+
+# correlate and plot
+x = np.array(npy1r_exp)
+y = rsq
+
+corr = stats.spearmanr(x, y)
+pvalspin = fcn_megfmri.get_spinp(x, y, corrval=corr[0], nspin=10000,
+                                 corrtype='spearman',
+                                 lhannot=lhlabels, rhannot=rhlabels)
+
+title = 'spearman r = %1.3f - p (spin) = %1.4f' % (corr[0], pvalspin)
+xlab = 'NPY1R expression'
+ylab = 'R-squared'
+plt.figure()
+fcn_megfmri.scatterregplot(x, y, title, xlab, ylab, 60)
