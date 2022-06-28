@@ -2,7 +2,7 @@
 This repository contains processing scripts and data in support of the preprint:
 
 Shafiei, G., Baillet, S., & Misic, B. (2022). Human electromagnetic and haemodynamic networks systematically converge in unimodal cortex and diverge in transmodal cortex. bioRxiv.
-[doi: https://doi.org/10.1101/2021.09.07.458941](doi: https://doi.org/10.1101/2021.09.07.458941)
+[https://doi.org/10.1101/2021.09.07.458941](https://doi.org/10.1101/2021.09.07.458941)
 
 ## `code`
 The [code](code/) folder contains all the code used to run the analyses and generate the figures.
