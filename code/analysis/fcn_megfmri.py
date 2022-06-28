@@ -693,3 +693,16 @@ def make_colormaps():
                                            np.ones((42, 3)) * colors[5])))
 
     return cmap_seq, cmap_seq_r, megcmap, megcmap2, categ_cmap
+
+
+def make_colormap_rsn():
+    colors = sns.color_palette('hls', n_colors=7)
+    categ_cmap = ListedColormap(np.vstack((np.ones((37, 3)) * np.array(colors[0]),
+                                           np.ones((37, 3)) * np.array(colors[1]),
+                                           np.ones((37, 3)) * np.array(colors[2]),
+                                           np.ones((37, 3)) * np.array(colors[3]),
+                                           np.ones((37, 3)) * np.array(colors[4]),
+                                           np.ones((37, 3)) * np.array(colors[5]),
+                                           np.ones((34, 3)) * np.array(colors[6]))))
+
+    return categ_cmap
